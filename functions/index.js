@@ -1,5 +1,7 @@
 const functions = require("firebase-functions");
+const axios = require("axios").default;
 const TwitterApi = require("twitter-api-v2").default;
+
 const { Configuration, OpenAIApi } = require("openai");
 const admin = require("firebase-admin");
 
@@ -24,7 +26,7 @@ exports.auth = functions.https.onRequest(async (req, res) => {
     scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
   });
 
-  await dbRef.set({ codeVerifier, state });
+  await dbRef.update({ codeVerifier, state });
   res.redirect(url);
 });
 
@@ -50,7 +52,7 @@ exports.callback = functions.https.onRequest(async (req, res) => {
     })
     .catch((e) => console.log(e));
 
-  await dbRef.set({ accessToken, refreshToken });
+  await dbRef.update({ accessToken, refreshToken });
 
   const { data } = await loggedClient.v2.me();
 
@@ -65,18 +67,24 @@ exports.tweet = functions.https.onRequest(async (req, res) => {
     refreshToken: newRefreshToken,
   } = await twitterClient.refreshOAuth2Token(refreshToken);
 
-  await dbRef.set({ accessToken, refreshToken: newRefreshToken });
+  await dbRef.update({ accessToken, refreshToken: newRefreshToken });
 
   const nextTweet = await openai.createCompletion("text-davinci-001", {
-    prompt: "tweet sommthing cool for alien life",
+    prompt: "tweet sommthing cool about alien life",
     max_tokens: 64,
   });
 
   const { data } = await refreshedClient.v2.tweet(nextTweet.data.choices[0].text);
-
+  dbRef.update({ lastTweetId: data.id });
   res.send(data);
 });
 
-// exports.dailyJob = functions.pubsub.schedule('0 5 * * *').onRun(context => {
-
-// })
+exports.dailyJob = functions.pubsub.schedule("0 5 * * *").onRun(async (context) => {
+  try {
+    const data = (await axios.get("https://us-central1-twitter-bot-1511.cloudfunctions.net/tweet"))
+      .data;
+    console.log(`posted tweet with id: ${data.id}`);
+  } catch (e) {
+    console.log(e);
+  }
+});
