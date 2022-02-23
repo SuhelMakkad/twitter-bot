@@ -76,6 +76,7 @@ exports.tweet = functions.https.onRequest(async (req, res) => {
 
   const { data } = await refreshedClient.v2.tweet(nextTweet.data.choices[0].text);
   dbRef.update({ lastTweetId: data.id });
+
   res.send(data);
 });
 
