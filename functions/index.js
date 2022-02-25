@@ -19,10 +19,9 @@ const config = new Configuration({
 });
 const openai = new OpenAIApi(config);
 
-const callbackURL = "http://127.0.0.1:5000/twitter-bot-1511/us-central1/callback";
 
 exports.auth = functions.https.onRequest(async (req, res) => {
-  const { url, codeVerifier, state } = twitterClient.generateOAuth2AuthLink(callbackURL, {
+  const { url, codeVerifier, state } = twitterClient.generateOAuth2AuthLink(process.env.CALLBACK_URL, {
     scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
   });
 
@@ -48,7 +47,7 @@ exports.callback = functions.https.onRequest(async (req, res) => {
     .loginWithOAuth2({
       code,
       codeVerifier,
-      redirectUri: callbackURL,
+      redirectUri: process.env.CALLBACK_URL,
     })
     .catch((e) => console.log(e));
 
@@ -82,7 +81,7 @@ exports.tweet = functions.https.onRequest(async (req, res) => {
 
 exports.dailyJob = functions.pubsub.schedule("0 5 * * *").onRun(async (context) => {
   try {
-    const data = (await axios.get("https://us-central1-twitter-bot-1511.cloudfunctions.net/tweet"))
+    const data = (await axios.get(process.env.TWEET_URL))
       .data;
     console.log(`posted tweet with id: ${data.id}`);
   } catch (e) {
