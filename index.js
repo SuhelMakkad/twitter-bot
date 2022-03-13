@@ -1,13 +1,29 @@
-const functions = require("firebase-functions");
+const app = require("express")();
+const cors = require("cors");
+const http = require("http").Server(app);
+const bodyParser = require("body-parser");
+
 const axios = require("axios").default;
 const TwitterApi = require("twitter-api-v2").default;
 
 const { Configuration, OpenAIApi } = require("openai");
 const admin = require("firebase-admin");
+const serviceAccount = require("./serviceAccountKey.json");
 
-admin.initializeApp();
+require("dotenv").config();
+
+const jsonParser = bodyParser.json();
+
+app.use(cors({ origin: "*", optionsSuccessStatus: 200 }));
+app.use(jsonParser);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const PORT = process.env.PORT || 4545;
 
 const dbRef = admin.firestore().doc("tokens/demo");
+
 const twitterClient = new TwitterApi({
   clientId: process.env.CLIENT_ID,
   clientSecret: process.env.CLIENT_SECRET,
@@ -19,17 +35,19 @@ const config = new Configuration({
 });
 const openai = new OpenAIApi(config);
 
-
-exports.auth = functions.https.onRequest(async (req, res) => {
-  const { url, codeVerifier, state } = twitterClient.generateOAuth2AuthLink(process.env.CALLBACK_URL, {
-    scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
-  });
+app.get("/auth", async (req, res) => {
+  const { url, codeVerifier, state } = twitterClient.generateOAuth2AuthLink(
+    process.env.CALLBACK_URL,
+    {
+      scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
+    }
+  );
 
   await dbRef.update({ codeVerifier, state });
   res.redirect(url);
 });
 
-exports.callback = functions.https.onRequest(async (req, res) => {
+app.get("/callback", async (req, res) => {
   const { state, code } = req.query;
 
   const dbSnapshot = await dbRef.get();
@@ -58,7 +76,7 @@ exports.callback = functions.https.onRequest(async (req, res) => {
   res.send(data);
 });
 
-exports.tweet = functions.https.onRequest(async (req, res) => {
+app.get("/tweet", async (req, res) => {
   const { refreshToken } = (await dbRef.get()).data();
   const {
     client: refreshedClient,
@@ -79,12 +97,6 @@ exports.tweet = functions.https.onRequest(async (req, res) => {
   res.send(data);
 });
 
-exports.dailyJob = functions.pubsub.schedule("0 5 * * *").onRun(async (context) => {
-  try {
-    const data = (await axios.get(process.env.TWEET_URL))
-      .data;
-    console.log(`posted tweet with id: ${data.id}`);
-  } catch (e) {
-    console.log(e);
-  }
+http.listen(PORT, () => {
+  console.log("listening on :" + PORT);
 });
