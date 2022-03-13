@@ -65,5 +65,4 @@ node_modules/
 # dotenv environment variables file
 .env
 
-#firebase service account key
-./serviceAccountKey.json
+serviceAccountKey.json
